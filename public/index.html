@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f2eee5">
+    <meta name="description" content="FO 工具架，集中安装浏览器用户脚本。">
+    <title>FO 工具架 · 用户脚本</title>
+    <style>
+      :root {
+        --paper: #f2eee5;
+        --paper-deep: #e8e1d4;
+        --ink: #191816;
+        --muted: #6e6a62;
+        --line: rgba(25, 24, 22, .16);
+        --accent: #f06449;
+        --accent-dark: #c84732;
+        --card: #fffdf8;
+        --shadow: 8px 8px 0 rgba(25, 24, 22, .1);
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--paper); }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(rgba(25, 24, 22, .035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(25, 24, 22, .035) 1px, transparent 1px),
+          var(--paper);
+        background-size: 28px 28px;
+        color: var(--ink);
+        font-family: Georgia, "Times New Roman", serif;
+        min-height: 100vh;
+      }
+
+      a { color: inherit; }
+
+      .page {
+        margin: 0 auto;
+        max-width: 1120px;
+        padding: 28px 28px 42px;
+      }
+
+      .masthead {
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        justify-content: space-between;
+        letter-spacing: .04em;
+        padding-bottom: 16px;
+        text-transform: uppercase;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        font-size: 13px;
+        font-weight: 800;
+        gap: 10px;
+      }
+
+      .brand-mark {
+        background: var(--ink);
+        color: var(--paper);
+        display: grid;
+        height: 28px;
+        place-items: center;
+        transform: rotate(-6deg);
+        width: 28px;
+      }
+
+      .masthead-meta {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .hero {
+        align-items: end;
+        display: grid;
+        gap: 28px;
+        grid-template-columns: minmax(0, 1.4fr) minmax(220px, .6fr);
+        padding: 76px 0 62px;
+      }
+
+      .eyebrow {
+        color: var(--accent-dark);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        margin: 0 0 16px;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: clamp(48px, 8vw, 96px);
+        font-weight: 500;
+        letter-spacing: -.075em;
+        line-height: .88;
+        margin: 0;
+        max-width: 780px;
+      }
+
+      .hero-note {
+        border-left: 3px solid var(--accent);
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.45;
+        margin: 0;
+        max-width: 280px;
+        padding-left: 18px;
+      }
+
+      .section-heading {
+        align-items: baseline;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        padding-bottom: 12px;
+      }
+
+      .section-heading h2 {
+        font-size: 25px;
+        font-weight: 500;
+        letter-spacing: -.04em;
+        margin: 0;
+      }
+
+      .count {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .script-list {
+        display: grid;
+        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+        padding: 24px 0 58px;
+      }
+
+      .script-card {
+        background: var(--card);
+        border: 1px solid var(--ink);
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        min-height: 250px;
+        padding: 24px;
+        transition: box-shadow 180ms ease, transform 180ms ease;
+      }
+
+      .script-card:hover {
+        box-shadow: 12px 12px 0 rgba(25, 24, 22, .13);
+        transform: translate(-3px, -3px);
+      }
+
+      .script-topline {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .script-index,
+      .script-version {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
+      .script-index { color: var(--accent-dark); font-weight: 800; }
+      .script-version { color: var(--muted); }
+
+      .script-card h3 {
+        font-size: 30px;
+        font-weight: 500;
+        letter-spacing: -.055em;
+        line-height: 1;
+        margin: 42px 0 12px;
+      }
+
+      .script-description {
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.5;
+        margin: 0;
+        max-width: 440px;
+      }
+
+      .script-footer {
+        align-items: end;
+        display: flex;
+        gap: 18px;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 32px;
+      }
+
+      .script-scope {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 10px;
+        line-height: 1.5;
+        max-width: 210px;
+        overflow-wrap: anywhere;
+      }
+
+      .install-button {
+        align-items: center;
+        background: var(--accent);
+        border: 1px solid var(--ink);
+        color: var(--ink);
+        display: inline-flex;
+        flex-shrink: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        font-weight: 800;
+        gap: 10px;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 16px;
+        text-decoration: none;
+        transition: background 140ms ease, transform 140ms ease;
+      }
+
+      .install-button:hover { background: #ff7b61; }
+      .install-button:active { transform: scale(.96); }
+      .install-button:focus-visible,
+      .source-link:focus-visible { outline: 3px solid #2e6cff; outline-offset: 3px; }
+
+      .info-strip {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: grid;
+        gap: 24px;
+        grid-template-columns: 1fr 1fr;
+        padding-top: 22px;
+      }
+
+      .info-strip p {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.55;
+        margin: 0;
+      }
+
+      .source-link {
+        color: var(--ink);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        justify-self: end;
+        letter-spacing: .04em;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+      }
+
+      footer {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 10px;
+        letter-spacing: .04em;
+        padding-top: 44px;
+      }
+
+      @media (max-width: 680px) {
+        .page { padding: 20px 18px 32px; }
+        .masthead-meta { display: none; }
+        .hero {
+          display: block;
+          padding: 58px 0 48px;
+        }
+        .hero-note { margin-top: 28px; }
+        .script-card { min-height: 280px; }
+        .script-footer { align-items: start; flex-direction: column; }
+        .install-button { width: 100%; }
+        .info-strip { grid-template-columns: 1fr; }
+        .source-link { justify-self: start; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          scroll-behavior: auto !important;
+          transition-duration: .01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">F</span>
+          <span>FO / TOOLSHED</span>
+        </div>
+        <span class="masthead-meta">Browser utilities · static install page</span>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Small scripts, ready to run</p>
+          <h1 id="page-title">把工具放在手边。</h1>
+        </div>
+        <p class="hero-note">浏览器用户脚本的轻量安装页，点击一次即可交给 Tampermonkey 或 Violentmonkey。</p>
+      </section>
+
+      <section aria-labelledby="scripts-title">
+        <div class="section-heading">
+          <h2 id="scripts-title">当前脚本</h2>
+          <span class="count" id="script-count">0 scripts</span>
+        </div>
+        <div class="script-list" id="script-list"></div>
+      </section>
+
+      <section class="info-strip" aria-label="安装说明">
+        <p>安装前请先在浏览器中启用 Tampermonkey 或 Violentmonkey。更新脚本后，用户脚本管理器会沿用同一个地址检查新版本。</p>
+        <a class="source-link" href="./facebook-ad-video-downloader.user.js">VIEW SCRIPT SOURCE ↗</a>
+      </section>
+
+      <footer>FO TOOLSHED · USER SCRIPTS · 2026</footer>
+    </main>
+
+    <script>
+      const scripts = [
+        {
+          name: 'Facebook Ads Library 视频下载助手',
+          description: '在 Facebook Ads Library 的视频广告菜单中提取可用视频链接，并在新标签页打开。',
+          file: 'facebook-ad-video-downloader.user.js',
+          version: 'v1.0.0',
+          scope: 'facebook.com/ads/library/*'
+        }
+      ];
+
+      const scriptList = document.querySelector('#script-list');
+      const scriptCount = document.querySelector('#script-count');
+
+      scriptCount.textContent = `${scripts.length} ${scripts.length === 1 ? 'script' : 'scripts'}`;
+
+      scripts.forEach((script, index) => {
+        const card = document.createElement('article');
+        card.className = 'script-card';
+
+        const topLine = document.createElement('div');
+        topLine.className = 'script-topline';
+
+        const scriptIndex = document.createElement('span');
+        scriptIndex.className = 'script-index';
+        scriptIndex.textContent = `SCRIPT ${String(index + 1).padStart(2, '0')}`;
+
+        const version = document.createElement('span');
+        version.className = 'script-version';
+        version.textContent = script.version;
+
+        topLine.append(scriptIndex, version);
+
+        const title = document.createElement('h3');
+        title.textContent = script.name;
+
+        const description = document.createElement('p');
+        description.className = 'script-description';
+        description.textContent = script.description;
+
+        const footer = document.createElement('div');
+        footer.className = 'script-footer';
+
+        const scope = document.createElement('span');
+        scope.className = 'script-scope';
+        scope.textContent = `MATCH · ${script.scope}`;
+
+        const install = document.createElement('a');
+        install.className = 'install-button';
+        install.href = `./${script.file}`;
+        install.textContent = '安装脚本';
+        install.insertAdjacentText('beforeend', ' ↗');
+
+        footer.append(scope, install);
+        card.append(topLine, title, description, footer);
+        scriptList.appendChild(card);
+      });
+    </script>
+  </body>
+</html>
