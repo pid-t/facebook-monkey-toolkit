@@ -7,7 +7,7 @@
 先安装 [Tampermonkey](https://www.tampermonkey.net/) 或 Violentmonkey，然后打开部署后的用户脚本地址：
 
 ```text
-https://你的 Pages 域名.pages.dev/facebook-ad-video-downloader.user.js
+https://facebook-monkey-toolkit.d2bot/facebook-ad-video-downloader.user.js
 ```
 
 确认安装后，刷新 Facebook Ads Library 页面即可。

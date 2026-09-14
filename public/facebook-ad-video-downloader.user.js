@@ -2,6 +2,8 @@
 // @name         Facebook Ad Library 视频下载助手
 // @namespace    fo-tools
 // @version      1.0.0
+// @downloadURL  https://facebook-monkey-toolkit.d2bot/facebook-ad-video-downloader.user.js
+// @updateURL    https://facebook-monkey-toolkit.d2bot/facebook-ad-video-downloader.user.js
 // @description  在 Facebook Ad Library 的视频广告菜单中增加视频解析与下载入口
 // @match        https://www.facebook.com/ads/library/*
 // @run-at       document-start
