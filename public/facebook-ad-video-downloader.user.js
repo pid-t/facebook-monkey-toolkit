@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Facebook Ad Library 视频下载助手
 // @namespace    fo-tools
-// @version      1.0.0
-// @downloadURL  https://facebook-monkey-toolkit.d2bot/facebook-ad-video-downloader.user.js
-// @updateURL    https://facebook-monkey-toolkit.d2bot/facebook-ad-video-downloader.user.js
+// @version      1.0.1
+// @downloadURL  https://facebook-monkey-toolkit.d2bot.workers.dev/facebook-ad-video-downloader.user.js
+// @updateURL    https://facebook-monkey-toolkit.d2bot.workers.dev/facebook-ad-video-downloader.user.js
 // @description  在 Facebook Ad Library 的视频广告菜单中增加视频解析与下载入口
 // @match        https://www.facebook.com/ads/library/*
 // @run-at       document-start
@@ -20,6 +20,7 @@
   const CHANNEL_NAME = 'fo-facebook-ad-video-downloader';
   const RESULT_KEY = 'fo-facebook-ad-video-result';
   const MENU_ITEM_CLASS = 'fo-facebook-ad-video-menu-item';
+  const VIDEO_SELECTOR = 'video, [aria-label*="Play video"], [aria-label*="Play Video"]';
   const REQUEST_HASH_PREFIX = 'fo-request=';
   const DETAIL_TIMEOUT_MS = 15_000;
   const REQUEST_TIMEOUT_MS = DETAIL_TIMEOUT_MS + 5_000;
@@ -69,12 +70,9 @@
         }
 
         const card = findAdCard(menu);
-        const id = card && extractLibraryId(card.textContent || '');
-        const hasVideo = Boolean(card && card.querySelector(
-          'video, [aria-label*="Play video"], [aria-label*="Play Video"]'
-        ));
+        const id = getVideoAdId(card);
 
-        if (!id || !hasVideo) {
+        if (!id) {
           return;
         }
 
@@ -364,25 +362,49 @@
     const ownerId = layer && layer.getAttribute('data-ownerid');
     const trigger = ownerId && document.getElementById(ownerId);
     let current = trigger;
-    let candidate = null;
+    let card = null;
 
     while (current && current !== document.body) {
-      const text = current.textContent || '';
-      if (extractLibraryId(text)) {
-        candidate = current;
-        if (current.querySelector('video, [aria-label*="Play video"], [aria-label*="Play Video"]')) {
-          return current;
-        }
+      const ids = extractLibraryIds(current);
+
+      if (ids.length > 1) {
+        break;
       }
+
+      if (ids.length === 1) {
+        card = current;
+      }
+
       current = current.parentElement;
     }
 
-    return candidate;
+    return card;
   }
 
-  function extractLibraryId(text) {
-    const match = text.match(/Library ID:\s*(\d+)/i);
-    return match ? match[1] : '';
+  function getVideoAdId(card) {
+    if (!card || !card.querySelector(VIDEO_SELECTOR)) return '';
+    return extractLibraryId(card);
+  }
+
+  function extractLibraryId(root) {
+    return extractLibraryIds(root)[0] || '';
+  }
+
+  function extractLibraryIds(root) {
+    if (!root) return [];
+
+    const ids = new Set();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+
+    while (textNode) {
+      const text = (textNode.nodeValue || '').trim();
+      const match = text.match(/^(?:Library ID|资料库编号|檔案庫編號)\s*[:：]\s*(\d+)$/i);
+      if (match) ids.add(match[1]);
+      textNode = walker.nextNode();
+    }
+
+    return Array.from(ids);
   }
 
   function createRequestToken() {
