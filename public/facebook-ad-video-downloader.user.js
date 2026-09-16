@@ -1,225 +1,149 @@
 // ==UserScript==
 // @name         Facebook Ad Library 视频下载助手
 // @namespace    fo-tools
-// @version      1.0.1
+// @version      1.0.2
 // @downloadURL  https://facebook-monkey-toolkit.d2bot.workers.dev/facebook-ad-video-downloader.user.js
 // @updateURL    https://facebook-monkey-toolkit.d2bot.workers.dev/facebook-ad-video-downloader.user.js
 // @description  在 Facebook Ad Library 的视频广告菜单中增加视频解析与下载入口
 // @match        https://www.facebook.com/ads/library/*
 // @run-at       document-start
-// @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
-// @grant        GM_openInTab
-// @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
+// @connect      www.facebook.com
 // @noframes
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const CHANNEL_NAME = 'fo-facebook-ad-video-downloader';
-  const RESULT_KEY = 'fo-facebook-ad-video-result';
   const MENU_ITEM_CLASS = 'fo-facebook-ad-video-menu-item';
   const VIDEO_SELECTOR = 'video, [aria-label*="Play video"], [aria-label*="Play Video"]';
-  const REQUEST_HASH_PREFIX = 'fo-request=';
-  const DETAIL_TIMEOUT_MS = 15_000;
-  const REQUEST_TIMEOUT_MS = DETAIL_TIMEOUT_MS + 5_000;
-  const DETAIL_POLL_INTERVAL_MS = 500;
+  const REQUEST_TIMEOUT_MS = 20_000;
 
   installStyles();
-
-  const query = new URLSearchParams(window.location.search);
-  const libraryId = query.get('id');
-  const requestToken = getRequestToken();
-
-  if (libraryId && requestToken) {
-    runDetailParser(libraryId, requestToken);
-    return;
-  }
-
   runLibraryPage();
 
   function runLibraryPage() {
     const pendingRequests = new Map();
-    const channel = createChannel(handleResult);
-
-    if (typeof GM_addValueChangeListener === 'function') {
-      GM_addValueChangeListener(RESULT_KEY, function (_key, _oldValue, newValue) {
-        handleResult(parseMessage(newValue));
-      });
-    }
-
     const observer = new MutationObserver(function () {
       decorateOpenMenus();
     });
 
     whenBodyReady(function () {
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['data-ownerid'],
+        childList: true,
+        subtree: true
+      });
       decorateOpenMenus();
     });
 
     window.addEventListener('pagehide', function () {
       observer.disconnect();
-      if (channel) channel.close();
     }, { once: true });
 
     function decorateOpenMenus() {
       document.querySelectorAll('[role="menu"]').forEach(function (menu) {
-        if (menu.querySelector('.' + MENU_ITEM_CLASS)) {
-          return;
-        }
-
+        const existingItem = menu.querySelector('.' + MENU_ITEM_CLASS);
         const card = findAdCard(menu);
         const id = getVideoAdId(card);
 
         if (!id) {
+          if (existingItem) existingItem.remove();
           return;
         }
 
-        menu.appendChild(createDownloadMenuItem(id, function () {
-          const token = createRequestToken();
-          pendingRequests.set(token, { id: id, tab: null, timer: null });
-          requestVideoUrls(id, token, pendingRequests);
-        }));
-      });
-    }
-
-    function handleResult(message) {
-      if (!message || !message.token || !pendingRequests.has(message.token)) {
-        return;
-      }
-
-      const request = pendingRequests.get(message.token);
-      pendingRequests.delete(message.token);
-
-      if (request.timer) {
-        window.clearTimeout(request.timer);
-      }
-
-      if (request.tab && typeof request.tab.close === 'function') {
-        request.tab.close();
-      }
-
-      if (Array.isArray(message.urls) && message.urls.length > 0) {
-        showVideoPicker(message.id, message.urls);
-        return;
-      }
-
-      showToast(message.error || '详情页中没有找到可用的视频链接。', 'error');
-    }
-
-    function requestVideoUrls(id, token, requests) {
-      const detailUrl = new URL('https://www.facebook.com/ads/library/');
-      detailUrl.searchParams.set('id', id);
-      detailUrl.hash = REQUEST_HASH_PREFIX + encodeURIComponent(token);
-
-      try {
-        const openedTab = GM_openInTab(detailUrl.toString(), {
-          active: false,
-          insert: true,
-          setParent: true
-        });
-
-        const request = requests.get(token);
-        if (request) {
-          request.timer = window.setTimeout(function () {
-            const expiredRequest = requests.get(token);
-            if (!expiredRequest) return;
-            requests.delete(token);
-            if (expiredRequest.tab && typeof expiredRequest.tab.close === 'function') {
-              expiredRequest.tab.close();
-            }
-            showToast('广告详情页加载超时，请重试。', 'error');
-          }, REQUEST_TIMEOUT_MS);
+        const pendingRequest = pendingRequests.get(id);
+        if (existingItem && existingItem.dataset.libraryId === id) {
+          setDownloadMenuItemState(
+            existingItem,
+            pendingRequest ? 'loading' : 'idle'
+          );
+          return;
         }
 
-        if (openedTab && typeof openedTab.then === 'function') {
-          openedTab.then(function (tab) {
-            const pendingRequest = requests.get(token);
-            if (pendingRequest) pendingRequest.tab = tab;
+        if (existingItem) existingItem.remove();
+
+        const item = createDownloadMenuItem(id, function () {
+          if (pendingRequests.has(id)) return;
+
+          const request = setRequestPending(id, true);
+          requestVideoUrls(id, function (urls) {
+            if (pendingRequests.get(id) !== request) return;
+            setRequestPending(id, false);
+            showVideoPicker(id, urls);
+          }, function (message) {
+            if (pendingRequests.get(id) !== request) return;
+            setRequestPending(id, false);
+            showToast(message, 'error');
           });
-        } else {
-          const pendingRequest = requests.get(token);
-          if (pendingRequest) pendingRequest.tab = openedTab;
-        }
-      } catch (error) {
-        requests.delete(token);
-        showToast('无法打开广告详情页：' + getErrorMessage(error), 'error');
-      }
-    }
-
-    function createChannel(onMessage) {
-      if (typeof BroadcastChannel !== 'function') {
-        return null;
-      }
-
-      const channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.addEventListener('message', function (event) {
-        onMessage(parseMessage(event.data));
-      });
-      return channel;
-    }
-  }
-
-  function runDetailParser(id, token) {
-    let finished = false;
-    const startedAt = Date.now();
-    const pollTimer = window.setInterval(function () {
-      tryParse();
-    }, DETAIL_POLL_INTERVAL_MS);
-
-    whenBodyReady(function () {
-      window.setTimeout(tryParse, 400);
-    });
-
-    tryParse();
-
-    function tryParse() {
-      if (finished) return;
-
-      const urls = extractVideoUrls(document.documentElement && document.documentElement.outerHTML);
-      if (urls.length > 0) {
-        finish({ id: id, token: token, urls: urls });
-        return;
-      }
-
-      if (Date.now() - startedAt >= DETAIL_TIMEOUT_MS) {
-        finish({
-          id: id,
-          token: token,
-          urls: [],
-          error: '详情页加载完成，但没有找到 MP4 视频链接。'
         });
-      }
+
+        if (pendingRequest) {
+          setDownloadMenuItemState(item, 'loading');
+        }
+        menu.appendChild(item);
+      });
     }
 
-    function finish(message) {
-      finished = true;
-      window.clearInterval(pollTimer);
-      publishResult(message);
+    function setRequestPending(id, isPending) {
+      let request = null;
+      if (isPending) {
+        request = {};
+        pendingRequests.set(id, request);
+      } else {
+        pendingRequests.delete(id);
+      }
 
-      // GM_openInTab 返回的标签页由列表页关闭；此处只处理直接被浏览器脚本打开的情况。
-      window.setTimeout(function () {
-        try {
-          window.close();
-        } catch (_error) {
-          // 浏览器可能禁止页面自行关闭，列表页仍会关闭 GM_openInTab 标签。
-        }
-      }, 150);
+      document.querySelectorAll(
+        '.' + MENU_ITEM_CLASS + '[data-library-id="' + id + '"]'
+      ).forEach(function (item) {
+        setDownloadMenuItemState(item, isPending ? 'loading' : 'idle');
+      });
+
+      return request;
     }
   }
 
-  function publishResult(message) {
-    const payload = JSON.stringify(message);
+  function requestVideoUrls(id, onSuccess, onError) {
+    const detailUrl = new URL('https://www.facebook.com/ads/library');
+    detailUrl.searchParams.set('id', id);
 
-    if (typeof GM_setValue === 'function') {
-      GM_setValue(RESULT_KEY, payload);
+    if (typeof GM_xmlhttpRequest !== 'function') {
+      onError('当前用户脚本环境不支持后台请求。');
+      return;
     }
 
-    if (typeof BroadcastChannel === 'function') {
-      const channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.postMessage(message);
-      channel.close();
+    try {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: detailUrl.toString(),
+        timeout: REQUEST_TIMEOUT_MS,
+        onload: function (response) {
+          if (!response || response.status < 200 || response.status >= 300) {
+            const status = response && response.status ? '（HTTP ' + response.status + '）' : '';
+            onError('请求广告详情失败' + status + '。');
+            return;
+          }
+
+          const urls = extractVideoUrls(response.responseText);
+          if (urls.length === 0) {
+            onError('广告详情原始 HTML 中没有找到 MP4 视频链接。');
+            return;
+          }
+
+          onSuccess(urls);
+        },
+        onerror: function () {
+          onError('请求广告详情失败，请重试。');
+        },
+        ontimeout: function () {
+          onError('请求广告详情超时，请重试。');
+        }
+      });
+    } catch (_error) {
+      onError('无法发起广告详情请求。');
     }
   }
 
@@ -252,6 +176,8 @@
     return decodeHtmlEntities(
       url
         .replace(/\\u00253D/gi, '=')
+        .replace(/\\u0026/gi, '&')
+        .replace(/\\u003D/gi, '=')
         .replace(/\\/g, '')
     );
   }
@@ -265,15 +191,21 @@
   function createDownloadMenuItem(id, onClick) {
     const item = document.createElement('div');
     item.className = MENU_ITEM_CLASS;
+    item.dataset.libraryId = id;
     item.setAttribute('role', 'menuitem');
     item.setAttribute('tabindex', '0');
-    item.setAttribute('aria-label', '下载视频');
-    item.innerHTML = '<span class="fo-facebook-ad-video-menu-icon" aria-hidden="true">↓</span>' +
-      '<span>下载视频</span>';
+    const icon = document.createElement('span');
+    icon.className = 'fo-facebook-ad-video-menu-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'fo-facebook-ad-video-menu-label';
+    item.append(icon, label);
+    setDownloadMenuItemState(item, 'idle');
 
     item.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
+      if (item.dataset.state === 'loading') return;
       onClick(id);
     });
 
@@ -281,10 +213,38 @@
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
       event.stopPropagation();
+      if (item.dataset.state === 'loading') return;
       onClick(id);
     });
 
     return item;
+  }
+
+  function setDownloadMenuItemState(item, state) {
+    if (item.dataset.state === state) return;
+
+    const isLoading = state === 'loading';
+    const icon = item.querySelector('.fo-facebook-ad-video-menu-icon');
+    const label = item.querySelector('.fo-facebook-ad-video-menu-label');
+
+    item.dataset.state = state;
+    item.className = MENU_ITEM_CLASS +
+      (isLoading ? ' ' + MENU_ITEM_CLASS + '-loading' : '');
+    item.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    item.setAttribute('aria-disabled', isLoading ? 'true' : 'false');
+
+    if (isLoading) {
+      item.setAttribute('aria-label', '正在获取视频，请稍候');
+      item.title = '';
+      icon.textContent = '';
+      label.textContent = '正在获取视频…';
+      return;
+    }
+
+    item.setAttribute('aria-label', '下载视频');
+    item.title = '';
+    icon.textContent = '↓';
+    label.textContent = '下载视频';
   }
 
   function showVideoPicker(id, urls) {
@@ -407,32 +367,6 @@
     return Array.from(ids);
   }
 
-  function createRequestToken() {
-    return 'fo-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-  }
-
-  function getRequestToken() {
-    const hash = window.location.hash.slice(1);
-    if (!hash.startsWith(REQUEST_HASH_PREFIX)) return '';
-    try {
-      return decodeURIComponent(hash.slice(REQUEST_HASH_PREFIX.length));
-    } catch (_error) {
-      return '';
-    }
-  }
-
-  function parseMessage(value) {
-    if (!value) return null;
-    if (typeof value === 'string') {
-      try {
-        return JSON.parse(value);
-      } catch (_error) {
-        return null;
-      }
-    }
-    return value;
-  }
-
   function whenBodyReady(callback) {
     if (document.body) {
       callback();
@@ -445,14 +379,12 @@
     const toast = document.createElement('div');
     toast.className = 'fo-facebook-ad-video-toast fo-facebook-ad-video-toast-' + type;
     toast.textContent = message;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
     (document.body || document.documentElement).appendChild(toast);
     window.setTimeout(function () {
       toast.remove();
     }, 4500);
-  }
-
-  function getErrorMessage(error) {
-    return error && error.message ? error.message : String(error);
   }
 
   function escapeHtml(value) {
@@ -481,18 +413,42 @@
         background: rgba(0, 0, 0, .06);
         outline: none;
       }
+      .${MENU_ITEM_CLASS}-loading {
+        color: #65676b;
+        cursor: progress;
+      }
+      .${MENU_ITEM_CLASS}-loading:hover,
+      .${MENU_ITEM_CLASS}-loading:focus-visible {
+        background: rgba(0, 0, 0, .04);
+      }
       .fo-facebook-ad-video-menu-icon {
         align-items: center;
-        background: #1877f2;
-        border-radius: 50%;
-        color: white;
+        color: #050505;
         display: inline-flex;
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 18px;
+        font-weight: 600;
         height: 24px;
         justify-content: center;
         line-height: 1;
         width: 24px;
+      }
+      .${MENU_ITEM_CLASS}-loading .fo-facebook-ad-video-menu-icon::before {
+        animation: fo-facebook-ad-video-spin 700ms linear infinite;
+        border: 2px solid rgba(5, 5, 5, .28);
+        border-radius: 50%;
+        border-top-color: #050505;
+        box-sizing: border-box;
+        content: "";
+        height: 12px;
+        width: 12px;
+      }
+      @keyframes fo-facebook-ad-video-spin {
+        to { transform: rotate(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .${MENU_ITEM_CLASS}-loading .fo-facebook-ad-video-menu-icon::before {
+          animation: none;
+        }
       }
       .fo-facebook-ad-video-backdrop {
         align-items: center;
